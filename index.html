@@ -21,6 +21,7 @@ td{padding:6px;border-bottom:1px solid #ddd;text-align:center}
 .masuk{color:#28a745;font-weight:bold}
 .keluar{color:#dc3545;font-weight:bold}
 .filter-box{display:flex;gap:10px}
+.btn-edit{padding:5px 8px;font-size:12px;background:#ffc107;color:#000;border-radius:6px}
 </style>
 </head>
 
@@ -30,7 +31,6 @@ td{padding:6px;border-bottom:1px solid #ddd;text-align:center}
 
 <div class="container">
 
-<!-- FILTER BULAN & TAHUN -->
 <div class="card">
   <div class="filter-box">
     <select id="filterBulan"></select>
@@ -38,7 +38,6 @@ td{padding:6px;border-bottom:1px solid #ddd;text-align:center}
   </div>
 </div>
 
-<!-- FORM INPUT -->
 <div class="card">
   <input type="date" id="tanggal">
 
@@ -59,7 +58,6 @@ td{padding:6px;border-bottom:1px solid #ddd;text-align:center}
   <button id="btnSimpan">💾 Simpan Data</button>
 </div>
 
-<!-- TOTAL -->
 <div class="total-box">
   <div class="total-item">
     <div>Total Pemasukan</div>
@@ -71,7 +69,6 @@ td{padding:6px;border-bottom:1px solid #ddd;text-align:center}
   </div>
 </div>
 
-<!-- TABEL -->
 <div class="card">
 <table>
 <thead>
@@ -81,6 +78,7 @@ td{padding:6px;border-bottom:1px solid #ddd;text-align:center}
 <th>RT/RW</th>
 <th>Nominal</th>
 <th>Detail</th>
+<th>Aksi</th>
 </tr>
 </thead>
 <tbody id="tabelData"></tbody>
@@ -89,11 +87,11 @@ td{padding:6px;border-bottom:1px solid #ddd;text-align:center}
 
 </div>
 
-<!-- FIREBASE -->
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
 import {
-  getFirestore, collection, addDoc, onSnapshot, query, orderBy
+  getFirestore, collection, addDoc, onSnapshot, query,
+  orderBy, doc, updateDoc
 } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -108,7 +106,6 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// ELEMENT
 const tanggal = document.getElementById("tanggal");
 const jenis = document.getElementById("jenis");
 const rtRwBox = document.getElementById("rtRwBox");
@@ -123,58 +120,63 @@ const filterBulan = document.getElementById("filterBulan");
 const filterTahun = document.getElementById("filterTahun");
 
 let semuaData = [];
+let editId = null;
 
-// BULAN
 const namaBulan = [
-  "01-Januari","02-Februari","03-Maret","04-April","05-Mei","06-Juni",
-  "07-Juli","08-Agustus","09-September","10-Oktober","11-November","12-Desember"
+"01-Januari","02-Februari","03-Maret","04-April","05-Mei","06-Juni",
+"07-Juli","08-Agustus","09-September","10-Oktober","11-November","12-Desember"
 ];
 namaBulan.forEach(b=>{
   let v=b.split("-")[0];
   filterBulan.innerHTML+=`<option value="${v}">${b.split("-")[1]}</option>`;
 });
 
-// DEFAULT BULAN & TAHUN
 const now = new Date();
 filterBulan.value = String(now.getMonth()+1).padStart(2,"0");
 
-// TOGGLE RT/RW
 jenis.onchange=()=>rtRwBox.classList.toggle("hidden",jenis.value!=="Pemasukan");
 
-// TAMBAH RT/RW
 document.getElementById("btnRTRW").onclick=async()=>{
   if(!rtRwBaru.value) return alert("Isi RT/RW");
   await addDoc(collection(db,"rtRw"),{nama:rtRwBaru.value});
   rtRwBaru.value="";
 };
 
-// SIMPAN DATA
 document.getElementById("btnSimpan").onclick=async()=>{
   if(!tanggal.value||!jenis.value||!nominal.value) return alert("Lengkapi data");
-  await addDoc(collection(db,"keuangan"),{
+
+  const data={
     tanggal:tanggal.value,
     jenis:jenis.value,
     rtRw:jenis.value==="Pemasukan"?rtRw.value:"-",
     nominal:Number(nominal.value),
     detail:detail.value
-  });
+  };
+
+  if(editId){
+    await updateDoc(doc(db,"keuangan",editId),data);
+    editId=null;
+    document.getElementById("btnSimpan").innerText="💾 Simpan Data";
+  }else{
+    await addDoc(collection(db,"keuangan"),data);
+  }
+
   tanggal.value="";jenis.value="";nominal.value="";detail.value="";
   rtRw.value="";rtRwBox.classList.add("hidden");
 };
 
-// LOAD RT/RW
 onSnapshot(collection(db,"rtRw"),snap=>{
   rtRw.innerHTML="<option value=''>Pilih RT/RW</option>";
   snap.forEach(d=>rtRw.innerHTML+=`<option>${d.data().nama}</option>`);
 });
 
-// LOAD DATA
 onSnapshot(query(collection(db,"keuangan"),orderBy("tanggal","desc")),snap=>{
   semuaData=[];
   let tahunSet=new Set();
 
   snap.forEach(d=>{
     let data=d.data();
+    data.id=d.id;
     semuaData.push(data);
     tahunSet.add(data.tanggal.slice(0,4));
   });
@@ -184,30 +186,46 @@ onSnapshot(query(collection(db,"keuangan"),orderBy("tanggal","desc")),snap=>{
     filterTahun.innerHTML+=`<option value="${t}">${t}</option>`;
   });
   filterTahun.value=String(now.getFullYear());
-
   renderData();
 });
 
 filterBulan.onchange=renderData;
 filterTahun.onchange=renderData;
 
+window.editData=(id)=>{
+  const d=semuaData.find(x=>x.id===id);
+  if(!d) return;
+  editId=id;
+  tanggal.value=d.tanggal;
+  jenis.value=d.jenis;
+  nominal.value=d.nominal;
+  detail.value=d.detail;
+  if(d.jenis==="Pemasukan"){
+    rtRwBox.classList.remove("hidden");
+    rtRw.value=d.rtRw;
+  }
+  document.getElementById("btnSimpan").innerText="🔄 Update Data";
+};
+
 function renderData(){
   tabelData.innerHTML="";
   let masuk=0, keluar=0;
-  semuaData
-    .filter(d=>d.tanggal.slice(0,4)===filterTahun.value &&
-               d.tanggal.slice(5,7)===filterBulan.value)
-    .forEach(d=>{
-      tabelData.innerHTML+=`
-      <tr>
-        <td>${d.tanggal}</td>
-        <td>${d.jenis}</td>
-        <td>${d.rtRw}</td>
-        <td>Rp ${d.nominal.toLocaleString("id-ID")}</td>
-        <td>${d.detail}</td>
-      </tr>`;
-      d.jenis==="Pemasukan"?masuk+=d.nominal:keluar+=d.nominal;
-    });
+
+  semuaData.filter(d=>
+    d.tanggal.slice(0,4)===filterTahun.value &&
+    d.tanggal.slice(5,7)===filterBulan.value
+  ).forEach(d=>{
+    tabelData.innerHTML+=`
+    <tr>
+      <td>${d.tanggal}</td>
+      <td>${d.jenis}</td>
+      <td>${d.rtRw}</td>
+      <td>Rp ${d.nominal.toLocaleString("id-ID")}</td>
+      <td>${d.detail}</td>
+      <td><button class="btn-edit" onclick="editData('${d.id}')">Edit</button></td>
+    </tr>`;
+    d.jenis==="Pemasukan"?masuk+=d.nominal:keluar+=d.nominal;
+  });
 
   totalMasuk.innerText=masuk.toLocaleString("id-ID");
   totalKeluar.innerText=keluar.toLocaleString("id-ID");
