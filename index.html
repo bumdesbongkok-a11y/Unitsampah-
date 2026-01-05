@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Catatan Keuangan</title>
 
-<!-- ANTI CACHE -->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
@@ -97,7 +96,7 @@ td{padding:6px;border-bottom:1px solid #ddd;text-align:center}
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
 import {
   getFirestore, collection, addDoc, onSnapshot,
-  query, orderBy, doc, updateDoc, deleteDoc
+  doc, updateDoc, deleteDoc
 } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -127,10 +126,13 @@ const filterTahun = document.getElementById("filterTahun");
 const btnSimpan = document.getElementById("btnSimpan");
 const btnRTRW = document.getElementById("btnRTRW");
 
-let semuaData = [];
-let editId = null;
+let semuaData=[];
+let editId=null;
 
-// BULAN
+/* TANGGAL DEFAULT HARI INI */
+tanggal.value=new Date().toISOString().split("T")[0];
+
+/* BULAN */
 const namaBulan=[
 "01-Januari","02-Februari","03-Maret","04-April","05-Mei","06-Juni",
 "07-Juli","08-Agustus","09-September","10-Oktober","11-November","12-Desember"
@@ -141,19 +143,17 @@ namaBulan.forEach(b=>{
 });
 filterBulan.value=String(new Date().getMonth()+1).padStart(2,"0");
 
-// TOGGLE RT RW
 jenis.onchange=()=>rtRwBox.classList.toggle("hidden",jenis.value!=="Pemasukan");
 
-// SIMPAN RT RW
 btnRTRW.onclick=async()=>{
   if(!rtRwBaru.value) return alert("Isi RT/RW");
   await addDoc(collection(db,"rtRw"),{nama:rtRwBaru.value});
   rtRwBaru.value="";
 };
 
-// SIMPAN / UPDATE DATA
 btnSimpan.onclick=async()=>{
   if(!tanggal.value||!jenis.value||!nominal.value) return alert("Lengkapi data");
+
   const data={
     tanggal:tanggal.value,
     jenis:jenis.value,
@@ -161,6 +161,7 @@ btnSimpan.onclick=async()=>{
     nominal:Number(nominal.value),
     detail:detail.value
   };
+
   if(editId){
     await updateDoc(doc(db,"keuangan",editId),data);
     editId=null;
@@ -168,26 +169,26 @@ btnSimpan.onclick=async()=>{
   }else{
     await addDoc(collection(db,"keuangan"),data);
   }
-  tanggal.value=jenis.value=nominal.value=detail.value=rtRw.value="";
+
+  jenis.value=nominal.value=detail.value=rtRw.value="";
   rtRwBox.classList.add("hidden");
 };
 
-// LOAD RT RW
 onSnapshot(collection(db,"rtRw"),s=>{
   rtRw.innerHTML="<option value=''>Pilih RT/RW</option>";
   s.forEach(d=>rtRw.innerHTML+=`<option>${d.data().nama}</option>`);
 });
 
-// LOAD DATA
-onSnapshot(query(collection(db,"keuangan"),orderBy("tanggal","desc")),s=>{
-  semuaData=[];let tahun=new Set();
+onSnapshot(collection(db,"keuangan"),s=>{
+  semuaData=[];
+  let tahun=new Set();
   s.forEach(d=>{
-    let x=d.data();x.id=d.id;
+    let x=d.data(); x.id=d.id;
     semuaData.push(x);
     tahun.add(x.tanggal.slice(0,4));
   });
   filterTahun.innerHTML="";
-  [...tahun].sort().reverse().forEach(t=>filterTahun.innerHTML+=`<option value="${t}">${t}</option>`);
+  [...tahun].sort().reverse().forEach(t=>filterTahun.innerHTML+=`<option>${t}</option>`);
   filterTahun.value=String(new Date().getFullYear());
   render();
 });
@@ -195,33 +196,35 @@ onSnapshot(query(collection(db,"keuangan"),orderBy("tanggal","desc")),s=>{
 filterBulan.onchange=render;
 filterTahun.onchange=render;
 
-// RENDER
+/* 🔥 AUTO URUT TANGGAL TRANSAKSI */
 function render(){
   tabelData.innerHTML="";
   let m=0,k=0;
+
   semuaData
-  .filter(d=>d.tanggal.slice(0,4)===filterTahun.value &&
-              d.tanggal.slice(5,7)===filterBulan.value)
-  .forEach(d=>{
-    tabelData.innerHTML+=`
-    <tr>
-      <td>${d.tanggal}</td>
-      <td>${d.jenis}</td>
-      <td>${d.rtRw}</td>
-      <td>Rp ${d.nominal.toLocaleString("id-ID")}</td>
-      <td>${d.detail}</td>
-      <td>
-        <button class="btn-edit" onclick="editData('${d.id}')">Edit</button>
-        <button class="btn-hapus" onclick="hapusData('${d.id}')">Hapus</button>
-      </td>
-    </tr>`;
-    d.jenis==="Pemasukan"?m+=d.nominal:k+=d.nominal;
-  });
+    .filter(d=>d.tanggal.slice(0,4)===filterTahun.value &&
+               d.tanggal.slice(5,7)===filterBulan.value)
+    .sort((a,b)=>new Date(a.tanggal)-new Date(b.tanggal))
+    .forEach(d=>{
+      tabelData.innerHTML+=`
+      <tr>
+        <td>${d.tanggal}</td>
+        <td>${d.jenis}</td>
+        <td>${d.rtRw}</td>
+        <td>Rp ${d.nominal.toLocaleString("id-ID")}</td>
+        <td>${d.detail}</td>
+        <td>
+          <button class="btn-edit" onclick="editData('${d.id}')">Edit</button>
+          <button class="btn-hapus" onclick="hapusData('${d.id}')">Hapus</button>
+        </td>
+      </tr>`;
+      d.jenis==="Pemasukan"?m+=d.nominal:k+=d.nominal;
+    });
+
   totalMasuk.innerText=m.toLocaleString("id-ID");
   totalKeluar.innerText=k.toLocaleString("id-ID");
 }
 
-// EDIT
 window.editData=id=>{
   const d=semuaData.find(x=>x.id===id);
   editId=id;
@@ -236,7 +239,6 @@ window.editData=id=>{
   btnSimpan.innerText="🔄 Update Data";
 };
 
-// HAPUS
 window.hapusData=async id=>{
   if(confirm("Yakin hapus data ini?")){
     await deleteDoc(doc(db,"keuangan",id));
