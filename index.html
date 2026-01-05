@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Catatan Keuangan</title>
+
+<style>
+body{margin:0;font-family:Arial;background:#f1f3f6}
+.header{background:#28a745;color:#fff;padding:15px;text-align:center;font-weight:bold;position:sticky;top:0}
+.container{padding:15px}
+.card{background:#fff;border-radius:12px;padding:15px;margin-bottom:15px;box-shadow:0 2px 6px rgba(0,0,0,.1)}
+input,select{width:100%;padding:12px;margin-top:8px;border-radius:8px;border:1px solid #ccc}
+button{width:100%;padding:12px;margin-top:10px;border:none;border-radius:8px;background:#28a745;color:#fff;font-size:16px}
+.hidden{display:none}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{background:#28a745;color:#fff;padding:8px}
+td{padding:6px;border-bottom:1px solid #ddd;text-align:center}
+.total-box{display:flex;gap:10px}
+.total-item{flex:1;background:#fff;border-radius:12px;padding:12px;text-align:center;box-shadow:0 2px 6px rgba(0,0,0,.1)}
+.masuk{color:#28a745;font-weight:bold}
+.keluar{color:#dc3545;font-weight:bold}
+.filter-box{display:flex;gap:10px}
+</style>
+</head>
+
+<body>
+
+<div class="header">📒 Catatan Keuangan</div>
+
+<div class="container">
+
+<!-- FILTER BULAN & TAHUN -->
+<div class="card">
+  <div class="filter-box">
+    <select id="filterBulan"></select>
+    <select id="filterTahun"></select>
+  </div>
+</div>
+
+<!-- FORM INPUT -->
+<div class="card">
+  <input type="date" id="tanggal">
+
+  <select id="jenis">
+    <option value="">Pilih Jenis</option>
+    <option value="Pemasukan">Pemasukan</option>
+    <option value="Pengeluaran">Pengeluaran</option>
+  </select>
+
+  <div id="rtRwBox" class="hidden">
+    <select id="rtRw"></select>
+    <input type="text" id="rtRwBaru" placeholder="Tambah RT / RW">
+    <button id="btnRTRW">➕ Simpan RT/RW</button>
+  </div>
+
+  <input type="number" id="nominal" placeholder="Nominal">
+  <input type="text" id="detail" placeholder="Detail transaksi">
+  <button id="btnSimpan">💾 Simpan Data</button>
+</div>
+
+<!-- TOTAL -->
+<div class="total-box">
+  <div class="total-item">
+    <div>Total Pemasukan</div>
+    <div class="masuk">Rp <span id="totalMasuk">0</span></div>
+  </div>
+  <div class="total-item">
+    <div>Total Pengeluaran</div>
+    <div class="keluar">Rp <span id="totalKeluar">0</span></div>
+  </div>
+</div>
+
+<!-- TABEL -->
+<div class="card">
+<table>
+<thead>
+<tr>
+<th>Tanggal</th>
+<th>Jenis</th>
+<th>RT/RW</th>
+<th>Nominal</th>
+<th>Detail</th>
+</tr>
+</thead>
+<tbody id="tabelData"></tbody>
+</table>
+</div>
+
+</div>
+
+<!-- FIREBASE -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
+import {
+  getFirestore, collection, addDoc, onSnapshot, query, orderBy
+} from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyAF9a5qILTbVII0oilxcuFLxlbVgLjxnHI",
+  authDomain: "unit-sampah.firebaseapp.com",
+  projectId: "unit-sampah",
+  storageBucket: "unit-sampah.firebasestorage.app",
+  messagingSenderId: "268154438046",
+  appId: "1:268154438046:web:9f74e7b6b57e01c739968f"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+// ELEMENT
+const tanggal = document.getElementById("tanggal");
+const jenis = document.getElementById("jenis");
+const rtRwBox = document.getElementById("rtRwBox");
+const rtRw = document.getElementById("rtRw");
+const rtRwBaru = document.getElementById("rtRwBaru");
+const nominal = document.getElementById("nominal");
+const detail = document.getElementById("detail");
+const tabelData = document.getElementById("tabelData");
+const totalMasuk = document.getElementById("totalMasuk");
+const totalKeluar = document.getElementById("totalKeluar");
+const filterBulan = document.getElementById("filterBulan");
+const filterTahun = document.getElementById("filterTahun");
+
+let semuaData = [];
+
+// BULAN
+const namaBulan = [
+  "01-Januari","02-Februari","03-Maret","04-April","05-Mei","06-Juni",
+  "07-Juli","08-Agustus","09-September","10-Oktober","11-November","12-Desember"
+];
+namaBulan.forEach(b=>{
+  let v=b.split("-")[0];
+  filterBulan.innerHTML+=`<option value="${v}">${b.split("-")[1]}</option>`;
+});
+
+// DEFAULT BULAN & TAHUN
+const now = new Date();
+filterBulan.value = String(now.getMonth()+1).padStart(2,"0");
+
+// TOGGLE RT/RW
+jenis.onchange=()=>rtRwBox.classList.toggle("hidden",jenis.value!=="Pemasukan");
+
+// TAMBAH RT/RW
+document.getElementById("btnRTRW").onclick=async()=>{
+  if(!rtRwBaru.value) return alert("Isi RT/RW");
+  await addDoc(collection(db,"rtRw"),{nama:rtRwBaru.value});
+  rtRwBaru.value="";
+};
+
+// SIMPAN DATA
+document.getElementById("btnSimpan").onclick=async()=>{
+  if(!tanggal.value||!jenis.value||!nominal.value) return alert("Lengkapi data");
+  await addDoc(collection(db,"keuangan"),{
+    tanggal:tanggal.value,
+    jenis:jenis.value,
+    rtRw:jenis.value==="Pemasukan"?rtRw.value:"-",
+    nominal:Number(nominal.value),
+    detail:detail.value
+  });
+  tanggal.value="";jenis.value="";nominal.value="";detail.value="";
+  rtRw.value="";rtRwBox.classList.add("hidden");
+};
+
+// LOAD RT/RW
+onSnapshot(collection(db,"rtRw"),snap=>{
+  rtRw.innerHTML="<option value=''>Pilih RT/RW</option>";
+  snap.forEach(d=>rtRw.innerHTML+=`<option>${d.data().nama}</option>`);
+});
+
+// LOAD DATA
+onSnapshot(query(collection(db,"keuangan"),orderBy("tanggal","desc")),snap=>{
+  semuaData=[];
+  let tahunSet=new Set();
+
+  snap.forEach(d=>{
+    let data=d.data();
+    semuaData.push(data);
+    tahunSet.add(data.tanggal.slice(0,4));
+  });
+
+  filterTahun.innerHTML="";
+  [...tahunSet].sort().reverse().forEach(t=>{
+    filterTahun.innerHTML+=`<option value="${t}">${t}</option>`;
+  });
+  filterTahun.value=String(now.getFullYear());
+
+  renderData();
+});
+
+filterBulan.onchange=renderData;
+filterTahun.onchange=renderData;
+
+function renderData(){
+  tabelData.innerHTML="";
+  let masuk=0, keluar=0;
+  semuaData
+    .filter(d=>d.tanggal.slice(0,4)===filterTahun.value &&
+               d.tanggal.slice(5,7)===filterBulan.value)
+    .forEach(d=>{
+      tabelData.innerHTML+=`
+      <tr>
+        <td>${d.tanggal}</td>
+        <td>${d.jenis}</td>
+        <td>${d.rtRw}</td>
+        <td>Rp ${d.nominal.toLocaleString("id-ID")}</td>
+        <td>${d.detail}</td>
+      </tr>`;
+      d.jenis==="Pemasukan"?masuk+=d.nominal:keluar+=d.nominal;
+    });
+
+  totalMasuk.innerText=masuk.toLocaleString("id-ID");
+  totalKeluar.innerText=keluar.toLocaleString("id-ID");
+}
+</script>
+
+</body>
+</html>
