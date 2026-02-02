@@ -41,7 +41,9 @@ td{padding:6px;border-bottom:1px solid #ddd;text-align:center}
     <select id="filterBulan"></select>
     <select id="filterTahun"></select>
   </div>
+  <button id="btnTampilkan">🔍 Tampilkan</button>
 </div>
+
 
 <div class="card">
   <input type="date" id="tanggal">
@@ -125,9 +127,13 @@ const filterBulan = document.getElementById("filterBulan");
 const filterTahun = document.getElementById("filterTahun");
 const btnSimpan = document.getElementById("btnSimpan");
 const btnRTRW = document.getElementById("btnRTRW");
+const btnTampilkan = document.getElementById("btnTampilkan");
+
 
 let semuaData=[];
 let editId=null;
+let pertamaKali = true;
+
 
 /* TANGGAL DEFAULT HARI INI */
 tanggal.value=new Date().toISOString().split("T")[0];
@@ -189,12 +195,21 @@ onSnapshot(collection(db,"keuangan"),s=>{
   });
   filterTahun.innerHTML="";
   [...tahun].sort().reverse().forEach(t=>filterTahun.innerHTML+=`<option>${t}</option>`);
-  filterTahun.value=String(new Date().getFullYear());
-  render();
+ if (!filterTahun.value) {
+  filterTahun.value = String(new Date().getFullYear());
+}
+
+ if (pertamaKali) {
+  render();          // auto tampil bulan aktif
+  pertamaKali = false;
+}
+
 });
 
-filterBulan.onchange=render;
-filterTahun.onchange=render;
+btnTampilkan.onclick = () => {
+  render();
+};
+
 
 /* 🔥 AUTO URUT TANGGAL TRANSAKSI */
 function render(){
