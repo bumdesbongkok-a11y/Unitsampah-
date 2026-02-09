@@ -199,10 +199,10 @@ onSnapshot(collection(db,"keuangan"),s=>{
   filterTahun.value = String(new Date().getFullYear());
 }
 
- if (pertamaKali) {
+ 
   render();          // auto tampil bulan aktif
-  pertamaKali = false;
-}
+  
+
 
 });
 
